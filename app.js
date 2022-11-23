@@ -9,7 +9,7 @@ const poolOld = new Pool({
   host: 'localhost',
   port: 5432,
   user: 'old',
-  password: 'hehehe',
+  password: 'hehehe'
 });
 
 const poolNew = new Pool({
@@ -46,7 +46,6 @@ const oldDBreport = fs.createWriteStream('./oldDBreport.csv')
 
 const stringifyMigratedData = stringify({ header: true, columns: newDBColumns });
 const stringifyOldData = stringify({ header: true, columns: oldDBColumns });
-
 
 try {
   poolOld.connect((err, client, done) => {

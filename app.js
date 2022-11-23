@@ -1,12 +1,18 @@
 
 const { poolNew, poolOld } = require('./db')
 const { oldDBStream, newDBStream } = require('./utils/utilFunctions')
+const fs = require('fs')
 
-const something = `select * from accounts limit 5`
-const somethingElse = `select * from accounts limit 5`
+
+const newDBQueryStream = `select * from accounts limit 5`
+const oldDBQueryStream = `select * from accounts limit 5`
+
+const migratedDBReport = fs.createWriteStream('./migratedDBreport.csv')
+const oldDBReport = fs.createWriteStream('./missedRecordsFromOld.csv')
+
 
   try {
-    poolOld.connect(oldDBStream(something))
+    poolOld.connect(oldDBStream(oldDBQueryStream, oldDBReport))
   } catch(e) {
     console.error(e)
   }
@@ -14,7 +20,7 @@ const somethingElse = `select * from accounts limit 5`
 
   
   try {
-    poolNew.connect(newDBStream(somethingElse))
+    poolNew.connect(newDBStream(newDBQueryStream, migratedDBReport))
   } catch(e) {
     console.error(e, 'error in first client')
   }

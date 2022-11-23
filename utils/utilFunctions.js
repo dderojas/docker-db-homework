@@ -1,10 +1,8 @@
-const fs = require('fs')
 const { Transform } = require('stream')
 const QueryStream = require('pg-query-stream')
-const { stringify } = require('csv')
 const isEqual = require('lodash.isequal')
 const { poolNew, poolOld } = require('../db')
-
+const { stringify } = require('csv')
 
 const columns = [
   "id",
@@ -15,11 +13,8 @@ const columns = [
   "newRecord"
 ];
 
-const migratedDBreport = fs.createWriteStream('./migratedDBreport.csv')
-const oldDBreport = fs.createWriteStream('./missedRecordsFromOld.csv')
-
-const stringifyMigratedData = stringify({ header: true, columns });
-const stringifyOldData = stringify({ header: true, columns });
+const migratedDataHeaders = stringify({ header: true, columns });
+const oldDataHeaders = stringify({ header: true, columns });
 
 const transformFunc = (stream, pool) => {
 
@@ -28,15 +23,13 @@ const transformFunc = (stream, pool) => {
     async transform(chunk, encoding, callback) {
 
       if (pool === 'new') {
-        console.log('new!!!!!!!')
         stream.pause()
         // make sure records from old DB are in the new DB
         let resultsNewQuery = await poolNew.query(`SELECT * FROM accounts WHERE id = $1`, [chunk['id']])
         stream.resume()
-  
         // save records that didn't make it to new DB
         if (resultsNewQuery.rows.length === 0) {
-          stringifyOldData.write(chunk)
+          oldDataHeaders.write(chunk)
         }
         callback(null)
 
@@ -44,7 +37,6 @@ const transformFunc = (stream, pool) => {
 
       if (pool == 'old') {
         stream.pause()
-        console.log('old!!!!!!!!')
         // check to see if data from new DB is from the old DB
         let resultsOldQuery = await poolOld.query(`SELECT * FROM accounts WHERE id = $1`, [chunk['id']])
         stream.resume()
@@ -53,13 +45,13 @@ const transformFunc = (stream, pool) => {
         if (resultsOldQuery.rows.length === 0) {
   
           chunk['newRecord'] = 'true'
-          stringifyMigratedData.write(chunk)
+          migratedDataHeaders.write(chunk)
   
         // check that migrated records were not corrupted  
         } else if (!isEqual(chunk, resultsOldQuery.rows[0])) {
   
           chunk['corrupted'] = 'true'
-          stringifyMigratedData.write(chunk)
+          migratedDataHeaders.write(chunk)
   
         }
         callback(null)
@@ -70,7 +62,7 @@ const transformFunc = (stream, pool) => {
   return isInTable
 }
 
-const oldDBStream = (streamQuery) => {
+const oldDBStream = (streamQuery, reportPath) => {
 
   return (err, client, done) => {
     console.log('oldDB connected!!!') 
@@ -81,17 +73,17 @@ const oldDBStream = (streamQuery) => {
     const stream = client.query(query)
   
   
-    stream.on('end', async () => {
+    stream.on('end', () => {
       done()
       console.log('FINISHED oldDB!!!!!!!')
     })
     
-    stream.pipe(transformFunc(stream, 'new')).pipe(stringifyOldData).pipe(oldDBreport)
+    stream.pipe(transformFunc(stream, 'new')).pipe(oldDataHeaders).pipe(reportPath)
   
   }
 }
 
-const newDBStream = (streamQuery) => {
+const newDBStream = (streamQuery, reportPath) => {
 
   return (err, client, done) => {
     console.log('newDB connected!!!')
@@ -103,12 +95,12 @@ const newDBStream = (streamQuery) => {
     const stream = client.query(query)
   
   
-    stream.on('end', async () => {
+    stream.on('end', () => {
       done()
       console.log('FINISHED newDB!!!!!!!')
     })
     
-    stream.pipe(transformFunc(stream, 'old')).pipe(stringifyMigratedData).pipe(migratedDBreport)
+    stream.pipe(transformFunc(stream, 'old')).pipe(migratedDataHeaders).pipe(reportPath)
 
   }
 }

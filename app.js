@@ -1,11 +1,8 @@
-const express = require('express')
 const fs = require('fs')
 const { Transform, pipeline } = require('stream')
 const { Pool } = require('pg')
 const QueryStream = require('pg-query-stream')
-
-const app = express()
-// const port = 3001
+const { stringify } = require('csv')
 
 const poolOld = new Pool({
   host: 'localhost',
@@ -21,35 +18,6 @@ const poolNew = new Pool({
   password: 'hahaha',
 });
   
-  // app.get('/', async (req, res) => {
-  //   console.log('success call!')
-
-  //   const isInTable = new Transform({
-  //     transform(chunk, encoding, callback) {
-  //       console.log(chunk, 'INCHUCNK!@!@#')
-  //       callback(null);
-  //     },
-  //   });
-
-  //   const query = new QueryStream(`select * from accounts limit 2`)
-  //   let results = await pool.query(query)
-  //   try {
-  //     console.log(results.rows, 'first resultsssss')
-  //     const writeStuff = fs.createWriteStream('./something.txt')
-
-  //     pipeline(results, isInTable, writeStuff, () => {
-  //       console.log('itworked!@#!@#')
-  //     })
-  //     let something = results.rows[0]['id']
-  //     console.log(something, 'SOMETHING!@#!@#!2')
-  //     let results2 = await pool2.query(`SELECT * FROM accounts WHERE id = $1`, ['ght'])
-  //     console.log(results2.rows, 'results2222222')
-
-  //     res.status(200).send(results.rows)
-  //   } catch (e){ 
-  //     console.error(e)
-  //   }
-  // });
   
 
 (async () => {
@@ -63,32 +31,64 @@ const poolNew = new Pool({
 
 
 (() => {
-  const isInTable = new Transform({
-    objectMode: true,
-    transform(chunk, encoding, callback) {
-      console.log(chunk, 'CHUNK!@!@#')
-      callback(null);
-    },
-  });
-
+  
   try {
-   poolNew.connect((err, client, done) => {
-       console.log('newDB connected!!!') 
+    poolNew.connect((err, client, done) => {
+      console.log('newDB connected!!!')
 
+      
       if (err) throw err
-      const query = new QueryStream(`select * from accounts limit 2`)
+      const query = new QueryStream(`select * from accounts limit 10`)
       const stream = client.query(query)
-      // const writeStuff = fs.createWriteStream('./something.txt')
+      const writeStuff = fs.createWriteStream('./something.csv')
+      /*
+      {
+        id,
+        name,
+        email,
+        favorite_flavor,
+        missingInNewDB: boolean
+        corrupted: boolean
+        newRecord: boolean
+      }
+      */
+      const columns = [
+        "id",
+        "name",
+        "email",
+        "favorite_flavor",
+        "not_in_new_db",
+        "corrupted",
+        "newRecord"
+      ];
+      const stringifier = stringify({ header: true, columns: columns });
+
+      const isInTable = new Transform({
+        objectMode: true,
+        async transform(chunk, encoding, callback) {
+          // console.log(chunk, 'CHUNK!@!@#')
+          stream.pause()
+          let results = await poolOld.query(`SELECT * FROM accounts WHERE id = $1`, [chunk['id']])
+          // console.log(results.rows, 'after results!@#')
+          stream.resume()
+
+          if (results.rows.length === 0) {
+            console.log(chunk, 'chunkinIFFFF')
+            chunk['newRecord'] = 'true'
+            stringifier.write(chunk)
+            callback(null);
+          } else {
+            callback(null)
+          }
+        },
+      });
 
       stream.on('end', done)
-      stream.pipe(isInTable).pipe(process.stdout)
+      
+      stream.pipe(isInTable).pipe(stringifier).pipe(writeStuff)
     })
   } catch(e) {
     console.error(e, 'error in first client')
   }
 })();
 
-  
-  // app.listen(port, () => {
-  //   console.log(`server listening at port ${port}`)
-  // })

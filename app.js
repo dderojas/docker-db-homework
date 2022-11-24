@@ -1,11 +1,9 @@
-
 const { poolNew, poolOld } = require('./db')
 const { oldDBStream, newDBStream } = require('./utils/utilFunctions')
 const fs = require('fs')
 
-
-const newDBQueryStream = `select * from accounts limit 5`
-const oldDBQueryStream = `select * from accounts limit 5`
+const newDBQueryStream = `select * from accounts limit`
+const oldDBQueryStream = `select * from accounts limit`
 
 const migratedDBReport = fs.createWriteStream('./migratedDBreport.csv')
 const oldDBReport = fs.createWriteStream('./missedRecordsFromOld.csv')
